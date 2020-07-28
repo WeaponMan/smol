@@ -741,7 +741,7 @@ mod sys {
         pub fn new() -> io::Result<Reactor> {
             let handle = unsafe { we::epoll_create1(0) };
             if handle.is_null() {
-                println!("epoll_create1 res = -1, os = {}", sys::os::errno());
+                println!("epoll_create1 res = -1");
                 return Err(io::Error::last_os_error());
             }
             Ok(Reactor { handle })
@@ -754,7 +754,7 @@ mod sys {
                     winsock2::FIONBIO,
                     &mut nonblocking,
                 );
-                println!("winsock2::ioctlsocket res = {}, os = {}", res, sys::os::errno());
+                println!("winsock2::ioctlsocket res = {}", res);
                 if res != 0 {
                     return Err(io::Error::last_os_error());
                 }
@@ -772,7 +772,7 @@ mod sys {
                   &mut ev,
                 )
             };
-            println!("register: we::epoll_ctl res = {}, os = {}", res, sys::os::errno());
+            println!("register: we::epoll_ctl res = {}", res);
             if res == -1 {
               return Err(std::io::Error::last_os_error())
             }
@@ -805,7 +805,7 @@ mod sys {
                 &mut ev,
               )
             };
-            println!("reregister: we::epoll_ctl res = {}, os = {}", res, sys::os::errno());
+            println!("reregister: we::epoll_ctl res = {}", res);
             if res == -1 {
               return Err(std::io::Error::last_os_error());
             }
@@ -848,7 +848,7 @@ mod sys {
                 timeout_ms,
               )
             };
-            println!("deregister: we::epoll_ctl res = {}, os = {}", res, sys::os::errno());
+            println!("deregister: we::epoll_ctl res = {}", res);
             if res == -1 {
               return Err(std::io::Error::last_os_error());
             }
