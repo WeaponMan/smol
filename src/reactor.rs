@@ -26,7 +26,8 @@ use std::os::unix::io::RawFd;
 #[cfg(windows)]
 use std::os::windows::io::RawSocket;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex as StdMutex};
+use futures_util::lock::{Mutex, MutexGuard};
 use std::task::{Poll, Waker};
 use std::time::{Duration, Instant};
 
@@ -49,7 +50,7 @@ pub(crate) struct Reactor {
     ticker: AtomicUsize,
 
     /// Registered sources.
-    sources: Mutex<Slab<Arc<Source>>>,
+    sources: StdMutex<Slab<Arc<Source>>>,
 
     /// Temporary storage for I/O events when polling the reactor.
     events: Mutex<sys::Events>,
@@ -59,7 +60,7 @@ pub(crate) struct Reactor {
     /// Timers are in the order in which they fire. The `usize` in this type is a timer ID used to
     /// distinguish timers that fire at the same time. The `Waker` represents the task awaiting the
     /// timer.
-    timers: Mutex<BTreeMap<(Instant, usize), Waker>>,
+    timers: StdMutex<BTreeMap<(Instant, usize), Waker>>,
 
     /// A queue of timer operations (insert and remove).
     ///
@@ -74,9 +75,9 @@ impl Reactor {
         static REACTOR: Lazy<Reactor> = Lazy::new(|| Reactor {
             sys: sys::Reactor::new().expect("cannot initialize I/O event notification"),
             ticker: AtomicUsize::new(0),
-            sources: Mutex::new(Slab::new()),
+            sources: StdMutex::new(Slab::new()),
             events: Mutex::new(sys::Events::new()),
-            timers: Mutex::new(BTreeMap::new()),
+            timers: StdMutex::new(BTreeMap::new()),
             timer_ops: ConcurrentQueue::bounded(1000),
         });
         &REACTOR
@@ -103,7 +104,7 @@ impl Reactor {
         let source = Arc::new(Source {
             raw,
             key,
-            wakers: Mutex::new(Wakers {
+            wakers: StdMutex::new(Wakers {
                 tick_readable: 0,
                 tick_writable: 0,
                 readers: Vec::new(),
@@ -155,7 +156,7 @@ impl Reactor {
 
     /// Attempts to lock the reactor.
     pub fn try_lock(&self) -> Option<ReactorLock<'_>> {
-        self.events.try_lock().ok().map(|events| {
+        self.events.try_lock().map(|events| {
             let reactor = self;
             ReactorLock { reactor, events }
         })
@@ -327,7 +328,7 @@ pub(crate) struct Source {
     key: usize,
 
     /// Tasks interested in events on this source.
-    wakers: Mutex<Wakers>,
+    wakers: StdMutex<Wakers>,
 }
 
 /// Tasks interested in events on a source.
