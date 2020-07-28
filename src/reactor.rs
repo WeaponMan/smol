@@ -558,7 +558,7 @@ mod sys {
     }
 }
 
-/// Raw bindings to kqueue (macOS, iOS, FreeBSD, NetBSD, OpenBSD, DragonFly BSD).
+// Raw bindings to kqueue (macOS, iOS, FreeBSD, NetBSD, OpenBSD, DragonFly BSD).
 #[cfg(any(
     target_os = "macos",
     target_os = "ios",
@@ -710,7 +710,7 @@ mod sys {
     }
 }
 
-/// Raw bindings to wepoll (Windows).
+//Raw bindings to wepoll (Windows).
 #[cfg(target_os = "windows")]
 mod sys {
     use std::convert::TryInto;
@@ -741,6 +741,7 @@ mod sys {
         pub fn new() -> io::Result<Reactor> {
             let handle = unsafe { we::epoll_create1(0) };
             if handle.is_null() {
+                println!("epoll_create1 res = -1, os = {}", sys::os::errno());
                 return Err(io::Error::last_os_error());
             }
             Ok(Reactor { handle })
@@ -753,6 +754,7 @@ mod sys {
                     winsock2::FIONBIO,
                     &mut nonblocking,
                 );
+                println!("winsock2::ioctlsocket res = {}, os = {}", res, sys::os::errno());
                 if res != 0 {
                     return Err(io::Error::last_os_error());
                 }
@@ -761,12 +763,19 @@ mod sys {
                 events: 0,
                 data: we::epoll_data { u64: key as u64 },
             };
-            syscall!(epoll_ctl(
-                self.handle,
-                we::EPOLL_CTL_ADD as libc::c_int,
-                sock as we::SOCKET,
-                &mut ev,
-            ))?;
+
+            let res = unsafe {
+                we::epoll_ctl(
+                  self.handle,
+                  we::EPOLL_CTL_ADD as libc::c_int,
+                  sock as we::SOCKET,
+                  &mut ev,
+                )
+            };
+            println!("register: we::epoll_ctl res = {}, os = {}", res, sys::os::errno());
+            if res == -1 {
+              return Err(std::io::Error::last_os_error())
+            }
             Ok(())
         }
         pub fn reregister(
@@ -787,21 +796,34 @@ mod sys {
                 events: flags as u32,
                 data: we::epoll_data { u64: key as u64 },
             };
-            syscall!(epoll_ctl(
+
+            let res = unsafe {
+              we::epoll_ctl(
                 self.handle,
                 we::EPOLL_CTL_MOD as libc::c_int,
                 sock as we::SOCKET,
                 &mut ev,
-            ))?;
+              )
+            };
+            println!("reregister: we::epoll_ctl res = {}, os = {}", res, sys::os::errno());
+            if res == -1 {
+              return Err(std::io::Error::last_os_error());
+            }
             Ok(())
         }
         pub fn deregister(&self, sock: RawSocket) -> io::Result<()> {
-            syscall!(epoll_ctl(
+            let res = unsafe {
+              we::epoll_ctl(
                 self.handle,
                 we::EPOLL_CTL_DEL as libc::c_int,
                 sock as we::SOCKET,
                 0 as *mut we::epoll_event,
-            ))?;
+              )
+            };
+            println!("deregister: we::epoll_ctl res = {}", res);
+            if res == -1 {
+              return Err(std::io::Error::last_os_error());
+            }
             Ok(())
         }
         pub fn wait(&self, events: &mut Events, timeout: Option<Duration>) -> io::Result<usize> {
@@ -818,12 +840,19 @@ mod sys {
                     }
                 }
             };
-            events.len = syscall!(epoll_wait(
+            let res = unsafe {
+              we::epoll_wait(
                 self.handle,
                 events.list.as_mut_ptr(),
                 events.list.len() as libc::c_int,
                 timeout_ms,
-            ))? as usize;
+              )
+            };
+            println!("deregister: we::epoll_ctl res = {}, os = {}", res, sys::os::errno());
+            if res == -1 {
+              return Err(std::io::Error::last_os_error());
+            }
+            events.len = res as usize;
             Ok(events.len)
         }
         pub fn notify(&self) -> io::Result<()> {
